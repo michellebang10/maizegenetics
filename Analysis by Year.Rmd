@@ -1,0 +1,103 @@
+---
+title: "Analysis by Year"
+author: "Michelle Bang"
+date: "5/31/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+```{r}
+new_df <- read.table(file = "new_m_data.tsv",
+                              header = TRUE,
+                              sep = '\t')
+
+
+old_df <- read.table(file = "old_df.tsv",
+                              header = TRUE,
+                              sep = '\t')
+
+fem_df <- read.table(file = "female_data.tsv",
+                              header = TRUE,
+                              sep = '\t')
+
+fem_df$percentage <- fem_df$number_of_GFP_kernels / (fem_df$number_of_GFP_kernels + fem_df$number_of_WT_kernels)
+
+new_df$percentage <- new_df$number_of_GFP_kernels / (new_df$number_of_GFP_kernels + new_df$number_of_WT_kernels)
+
+old_df$percentage <- old_df$number_of_GFP_kernels / (old_df$number_of_GFP_kernels + old_df$number_of_WT_kernels)
+
+new_df1 <- new_df %>% select(name, allele, year, percentage)
+old_df1 <- old_df %>% select(name, allele, year, percentage)
+fem_df1 <- fem_df %>% select(name, allele, year, percentage)
+
+fem_df2 <- fem_df1 %>% filter(year != "2020")
+old_df2 <- old_df1 %>% filter(year != "2020")
+new_df2 <- new_df1 %>% filter(year != "2020")
+
+c_data <- rbind(fem_df1, old_df1)
+
+```
+
+```{r}
+old_df$year = as.factor(old_df$year)
+old_df$year <- relevel(old_df$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = old_df))
+summary(lm(percentage ~ factor(year), data = old_df))
+```
+
+```{r}
+c_data$year = as.factor(c_data$year)
+c_data$year <- relevel(c_data$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = c_data))
+summary(lm(percentage ~ factor(year), data = c_data))
+```
+
+```{r}
+fem_df$year = as.factor(fem_df$year)
+fem_df$year <- relevel(fem_df$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = fem_df))
+summary(lm(percentage ~ factor(year), data = fem_df))
+```
+
+```{r}
+old_df2$year = as.factor(old_df2$year)
+old_df2$year <- relevel(old_df2$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = old_df2))
+summary(lm(percentage ~ factor(year), data = old_df2))
+```
+
+```{r}
+new_df$year = as.factor(new_df$year)
+new_df$year <- relevel(new_df$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = new_df))
+summary(lm(percentage ~ factor(year), data = new_df))
+
+#try comparing 2018 and 2021
+```
+
+```{r}
+new_df2$year = as.factor(new_df2$year)
+new_df2$year <- relevel(new_df2$year, ref = 3)
+
+anova(lm(percentage ~ factor(year), data = new_df2))
+summary(lm(percentage ~ factor(year), data = new_df2))
+#try looking at outliers
+#y-axis: transmission rate
+#x-axis: year 
+#color: significance
+#think about using jitter
+#do this analysis but with just the 2018 alleles
+```

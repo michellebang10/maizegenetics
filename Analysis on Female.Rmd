@@ -1,0 +1,187 @@
+---
+title: "Analysis on Female"
+author: "Michelle Bang"
+date: "5/23/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Using tidyverse
+library(tidyverse)
+```
+
+```{r}
+female_df <- read.table(file = "female_data.tsv",
+                              header = TRUE,
+                              sep = '\t')
+```
+
+```{r}
+# separating the data into two categories
+vc_high <- female_df[female_df$category == "vegetative_cell_high",]
+sc_high <- female_df[female_df$category == "sperm_cell_high",]
+seedling_only <- female_df[female_df$category == "seedling_only",]
+```
+
+# Analysis on Vegetative Cell
+```{r}
+
+# Using quasi binomial log model
+
+veg_mod <- glm(cbind(number_of_GFP_kernels, number_of_WT_kernels) ~
+                                as.factor(allele),
+                              data = vc_high,
+                              family = quasibinomial(link = "logit"))
+print(veg_mod)
+
+S = vcov(veg_mod)
+
+raw_p = coef(summary(veg_mod))[1,4]
+beta_list = coef(summary(veg_mod))[1,1]
+est_coef = (exp(beta_list)/(1 + exp(beta_list)))
+low_int = exp(beta_list - qnorm(.975)*coef(summary(veg_mod))[1,2])/(1+exp(beta_list - qnorm(.975)*coef(summary(veg_mod))[1,2]))
+up_int = exp(beta_list + qnorm(.975)*coef(summary(veg_mod))[1,2])/(1+exp(beta_list + qnorm(.975)*coef(summary(veg_mod))[1,2]))
+
+for (i in 2:nrow(coef(summary(veg_mod)))){ # Starting at 2 because we already collected the first one...
+  beta = coef(summary(veg_mod))[1,1] + coef(summary(veg_mod))[i,1] # Intercept + Allele coefficient 
+  sigma = sqrt(sum(S[c(1,i),c(1,i)])) # Sigma from variance matrix
+  raw_p = c(raw_p, 2*(1-pnorm(abs(beta/sigma)))) # Raw p calculated using z normal distribution
+  beta_list = c(beta_list, beta)
+  est_coef = c(est_coef, (exp(beta)/(1+exp(beta))))
+  low_int = c(low_int, exp(beta-qnorm(.975)*sigma)/(1+exp(beta-qnorm(.975)*sigma)))
+  up_int = c(up_int, exp(beta+qnorm(.975)*sigma)/(1+exp(beta+qnorm(.975)*sigma)))
+  
+}
+
+adjusted_p = p.adjust(raw_p, method = "BH")
+
+Alleles = sort(unique(vc_high$allele))
+
+names(raw_p) = sort(unique(vc_high$allele)) # Names is name or row, unique only picks unique value from dataset
+names(beta_list) = sort(unique(vc_high$allele))
+names(est_coef) = sort(unique(vc_high$allele))
+names(Alleles) = sort(unique(vc_high$allele))
+names(adjusted_p) = sort(unique(vc_high$allele))
+names(low_int) = sort(unique(vc_high$allele))
+names(up_int) = sort(unique(vc_high$allele))
+
+fanalysis_summary_vc = data.frame(allele = Alleles, logit_of_percentage = beta_list, estimated_transmission_percentage = est_coef, lower_confidence_interval = low_int, upper_confidence_interval = up_int, raw_p_value = raw_p, adj_p_value = adjusted_p)
+
+fanalysis_summary_vc$expression_category = "Vegetative Cell"
+
+```
+
+# Analysis on Sperm Cell
+
+```{r}
+# Using quasi binomial log model
+
+sperm_mod <- glm(cbind(number_of_GFP_kernels, number_of_WT_kernels) ~
+                                as.factor(allele),
+                              data = sc_high,
+                              family = quasibinomial(link = "logit"))
+print(sperm_mod)
+
+S = vcov(sperm_mod)
+
+raw_p = coef(summary(sperm_mod))[1,4]
+beta_list = coef(summary(sperm_mod))[1,1]
+est_coef = (exp(beta_list)/(1 + exp(beta_list)))
+low_int = exp(beta_list - qnorm(.975)*coef(summary(sperm_mod))[1,2])/(1+exp(beta_list - qnorm(.975)*coef(summary(sperm_mod))[1,2]))
+up_int = exp(beta_list + qnorm(.975)*coef(summary(sperm_mod))[1,2])/(1+exp(beta_list + qnorm(.975)*coef(summary(sperm_mod))[1,2]))
+
+for (i in 2:nrow(coef(summary(sperm_mod)))){ # Starting at 2 because we already collected the first one...
+  beta = coef(summary(sperm_mod))[1,1] + coef(summary(sperm_mod))[i,1] # Intercept + Allele coefficient 
+  sigma = sqrt(sum(S[c(1,i),c(1,i)])) # Sigma from variance matrix
+  raw_p = c(raw_p, 2*(1-pnorm(abs(beta/sigma)))) # Raw p calculated using z normal distribution
+  beta_list = c(beta_list, beta)
+  est_coef = c(est_coef, (exp(beta)/(1+exp(beta))))
+  low_int = c(low_int, exp(beta-qnorm(.975)*sigma)/(1+exp(beta-qnorm(.975)*sigma)))
+  up_int = c(up_int, exp(beta+qnorm(.975)*sigma)/(1+exp(beta+qnorm(.975)*sigma)))
+  
+}
+
+adjusted_p = p.adjust(raw_p, method = "BH")
+
+Alleles = sort(unique(sc_high$allele))
+
+names(raw_p) = sort(unique(sc_high$allele)) # Names is name or row, unique only picks unique value from dataset
+names(beta_list) = sort(unique(sc_high$allele))
+names(est_coef) = sort(unique(sc_high$allele))
+names(Alleles) = sort(unique(sc_high$allele))
+names(adjusted_p) = sort(unique(sc_high$allele))
+names(low_int) = sort(unique(sc_high$allele))
+names(up_int) = sort(unique(sc_high$allele))
+
+fanalysis_summary_sc = data.frame(allele = Alleles, logit_of_percentage = beta_list, estimated_transmission_percentage = est_coef, lower_confidence_interval = low_int, upper_confidence_interval = up_int, raw_p_value = raw_p, adj_p_value = adjusted_p)
+
+fanalysis_summary_sc$expression_category = "Sperm Cell"
+
+```
+
+# Analysis on Seedling Only
+
+```{r}
+# Using quasi binomial log model
+
+seed_mod <- glm(cbind(number_of_GFP_kernels, number_of_WT_kernels) ~
+                                as.factor(allele),
+                              data = seedling_only,
+                              family = quasibinomial(link = "logit"))
+print(seed_mod)
+
+S = vcov(seed_mod)
+
+raw_p = coef(summary(seed_mod))[1,4]
+beta_list = coef(summary(seed_mod))[1,1]
+est_coef = (exp(beta_list)/(1 + exp(beta_list)))
+low_int = exp(beta_list - qnorm(.975)*coef(summary(seed_mod))[1,2])/(1+exp(beta_list - qnorm(.975)*coef(summary(seed_mod))[1,2]))
+up_int = exp(beta_list + qnorm(.975)*coef(summary(seed_mod))[1,2])/(1+exp(beta_list + qnorm(.975)*coef(summary(seed_mod))[1,2]))
+
+for (i in 2:nrow(coef(summary(seed_mod)))){ # Starting at 2 because we already collected the first one...
+  beta = coef(summary(seed_mod))[1,1] + coef(summary(seed_mod))[i,1] # Intercept + Allele coefficient 
+  sigma = sqrt(sum(S[c(1,i),c(1,i)])) # Sigma from variance matrix
+  raw_p = c(raw_p, 2*(1-pnorm(abs(beta/sigma)))) # Raw p calculated using z normal distribution
+  beta_list = c(beta_list, beta)
+  est_coef = c(est_coef, (exp(beta)/(1+exp(beta))))
+  low_int = c(low_int, exp(beta-qnorm(.975)*sigma)/(1+exp(beta-qnorm(.975)*sigma)))
+  up_int = c(up_int, exp(beta+qnorm(.975)*sigma)/(1+exp(beta+qnorm(.975)*sigma)))
+  
+}
+
+adjusted_p = p.adjust(raw_p, method = "BH")
+
+Alleles = sort(unique(seedling_only$allele))
+
+names(raw_p) = sort(unique(seedling_only$allele)) # Names is name or row, unique only picks unique value from dataset
+names(beta_list) = sort(unique(seedling_only$allele))
+names(est_coef) = sort(unique(seedling_only$allele))
+names(Alleles) = sort(unique(seedling_only$allele))
+names(adjusted_p) = sort(unique(seedling_only$allele))
+names(low_int) = sort(unique(seedling_only$allele))
+names(up_int) = sort(unique(seedling_only$allele))
+
+fanalysis_summary_seed = data.frame(allele = Alleles, logit_of_percentage = beta_list, estimated_transmission_percentage = est_coef, lower_confidence_interval = low_int, upper_confidence_interval = up_int, raw_p_value = raw_p, adj_p_value = adjusted_p)
+
+fanalysis_summary_seed$expression_category = "Seedling Only"
+
+
+```
+
+```{r}
+fanalysis_summary = rbind(fanalysis_summary_vc, fanalysis_summary_sc)
+fanalysis_summary = rbind(fanalysis_summary, fanalysis_summary_seed)
+
+#write.table(fanalysis_summary, "clipboard", sep = "\t")
+# Mac doesn't have clipboard manager
+
+ordered_summary = fanalysis_summary[order(fanalysis_summary$raw_p_value),]
+
+write.table(fanalysis_summary, file = "fem_analysis_sum.tsv", sep = "\t", row.names=FALSE) # column titles are wrong
+
+write.table(ordered_summary, file = "ordered_sum.tsv", sep = "\t", row.names=FALSE)
+```
