@@ -1,0 +1,63 @@
+---
+title: "Handler Effect"
+author: "Michelle Bang"
+date: '2022-10-12'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+```{r}
+data <- read.table(file = "TransmissionDataExtended_forMichelle_Set1_Male_Oct22.xlsx - All_male_data_18192021.tsv",
+                   header = TRUE,
+                   sep = "\t")
+```
+
+```{r}
+data$percentage <- data$number_of_GFP_kernels / (data$number_of_GFP_kernels + data$number_of_WT_kernels)
+```
+
+```{r}
+data %>%
+  group_by(pollen_handler) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
+```{r}
+data %>%
+  group_by(pollen_handler, year) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
+```{r}
+data %>%
+  filter(year == 2018) %>%
+  group_by(pollen_handler) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
+```{r}
+data %>%
+  filter(year == 2019) %>%
+  group_by(pollen_handler) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
+
+```{r}
+data %>%
+  filter(year == 2020) %>%
+  group_by(pollen_handler) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
+
+```{r}
+data %>%
+  filter(year == 2021) %>%
+  group_by(pollen_handler) %>%
+  summarize(avg_per = mean(percentage), count = n())
+```
