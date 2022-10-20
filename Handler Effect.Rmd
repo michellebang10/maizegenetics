@@ -1,7 +1,7 @@
 ---
 title: "Handler Effect"
 author: "Michelle Bang"
-date: '2022-10-12'
+date: '2022-10-19'
 output: html_document
 ---
 
@@ -23,7 +23,14 @@ data <- read.table(file = "TransmissionDataExtended_forMichelle_Set1_Male_Oct22.
 
 ```{r}
 data$percentage <- data$number_of_GFP_kernels / (data$number_of_GFP_kernels + data$number_of_WT_kernels)
+data$totalkernels <- data$number_of_GFP_kernels + data$number_of_WT_kernels
 ```
+
+```{r}
+data <- data %>%
+  mutate(pollen_handler = if_else(pollen_handler == 0, "?", pollen_handler))
+```
+
 
 ```{r}
 data %>%
@@ -60,4 +67,77 @@ data %>%
   filter(year == 2021) %>%
   group_by(pollen_handler) %>%
   summarize(avg_per = mean(percentage), count = n())
+```
+
+```{r}
+data %>%
+  group_by(allele) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+```
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+```
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R84A12")
+```
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R96B12")
+```
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R96C12")
+```
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R96B12")
+```
+```{r}
+ggplot(data = data, mapping = aes(x = allele, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+ggplot(data = data, mapping = aes(x = pollen_handler, y = percentage, color = allele)) +
+  geom_point()
+```
+
+```{r}
+data %>%
+  group_by(allele) %>%
+  summarize(mean_kernel = mean(totalkernels)) %>%
+  arrange(desc(mean_kernel))
+```
+```{r}
+data %>%
+  group_by(allele) %>%
+  summarize(mean_wtkernel = mean(number_of_WT_kernels)) %>%
+  arrange(desc(mean_wtkernel))
+```
+
+```{r}
+data %>%
+  group_by(allele) %>%
+  summarize(mean_gfpkernel = mean(number_of_GFP_kernels)) %>%
+  arrange(desc(mean_gfpkernel))
 ```
