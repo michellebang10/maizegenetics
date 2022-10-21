@@ -1,7 +1,7 @@
 ---
 title: "Handler Effect"
 author: "Michelle Bang"
-date: '2022-10-19'
+date: '2022-10-21'
 output: html_document
 ---
 
@@ -106,11 +106,12 @@ data %>%
 ```
 
 ```{r}
+# has only one handler
 data %>%
   group_by(allele, pollen_handler) %>%
   summarize(count = n()) %>%
   arrange(desc(count)) %>%
-  filter(allele == "R96B12")
+  filter(allele == "R106E07")
 ```
 ```{r}
 ggplot(data = data, mapping = aes(x = allele, y = percentage, color = pollen_handler)) +
@@ -140,4 +141,49 @@ data %>%
   group_by(allele) %>%
   summarize(mean_gfpkernel = mean(number_of_GFP_kernels)) %>%
   arrange(desc(mean_gfpkernel))
+```
+```{r}
+# linear model for one allele (R84A12)
+# had handler ?, H, J, M, Z
+data2 <- data %>%
+  filter(allele =="R84A12")
+modR84A12 <- lm(percentage ~ pollen_handler, data2)
+summary(modR84A12)
+```
+```{r}
+# linear model for one allele (R84A12)
+# looking at totalkernels
+data2 <- data %>%
+  filter(allele =="R84A12")
+mod2R84A12 <- lm(percentage ~ totalkernels, data2)
+summary(mod2R84A12)
+```
+```{r}
+#R96B12
+# J, Z and ?
+data2 <- data %>%
+  filter(allele =="R96B12")
+modR96B12 <- lm(percentage ~ pollen_handler, data2)
+summary(modR96B12)
+```
+```{r}
+#R96B12
+# J and Z only
+# very low r-square values
+data2 <- data %>%
+  filter(allele =="R96B12") %>%
+  filter(pollen_handler != "?")
+modR96B12 <- lm(percentage ~ pollen_handler, data2)
+summary(modR96B12)
+```
+
+
+```{r}
+# linear model for one allele (R106E07)
+# one handler, but had the most kernels
+# this one was not found to be significant in prev analysis
+data2 <- data %>%
+  filter(allele =="R106E07")
+modR106E07 <- lm(percentage ~ totalkernels, data2)
+summary(modR106E07)
 ```
