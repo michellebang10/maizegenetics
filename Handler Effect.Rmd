@@ -1,7 +1,7 @@
 ---
 title: "Handler Effect"
 author: "Michelle Bang"
-date: '2022-10-21'
+date: '2022-10-26'
 output: html_document
 ---
 
@@ -81,29 +81,7 @@ data %>%
   summarize(count = n()) %>%
   arrange(desc(count))
 ```
-```{r}
-data %>%
-  group_by(allele, pollen_handler) %>%
-  summarize(count = n()) %>%
-  arrange(desc(count)) %>%
-  filter(allele == "R84A12")
-```
 
-```{r}
-data %>%
-  group_by(allele, pollen_handler) %>%
-  summarize(count = n()) %>%
-  arrange(desc(count)) %>%
-  filter(allele == "R96B12")
-```
-
-```{r}
-data %>%
-  group_by(allele, pollen_handler) %>%
-  summarize(count = n()) %>%
-  arrange(desc(count)) %>%
-  filter(allele == "R96C12")
-```
 
 ```{r}
 # has only one handler
@@ -142,42 +120,643 @@ data %>%
   summarize(mean_gfpkernel = mean(number_of_GFP_kernels)) %>%
   arrange(desc(mean_gfpkernel))
 ```
+
+---R84A12---
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n(),meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R84A12")
+# mainly focus on the top two 
+# for actual statistics, focus on top two (? and J)
+# for visualization, try using all
+# special allele
+# also see if total kernels are different over years and handlers 
+# then see if difference in percentage comes from total counts
+# and have response: percentage, explanatory: handler, year, totalcount
+# add plots at the end as well
+```
+
+```{r}
+# visualization of R84A12
+R84A12 <- data %>%
+  filter(allele == "R84A12")
+
+ggplot(R84A12, mapping = aes(x = totalkernels, y = percentage, color = factor(year))) +
+  geom_point()
+```
+
 ```{r}
 # linear model for one allele (R84A12)
 # had handler ?, H, J, M, Z
 data2 <- data %>%
   filter(allele =="R84A12")
-modR84A12 <- lm(percentage ~ pollen_handler, data2)
+modR84A12 <- lm(percentage ~ pollen_handler + factor(year), data2)
 summary(modR84A12)
-```
-```{r}
-# linear model for one allele (R84A12)
-# looking at totalkernels
+# would have to do anova with reduced model to see p-value 
+
 data2 <- data %>%
   filter(allele =="R84A12")
-mod2R84A12 <- lm(percentage ~ totalkernels, data2)
+mod2R84A12 <- lm(percentage ~ pollen_handler, data2)
 summary(mod2R84A12)
+
+
 ```
+
 ```{r}
-#R96B12
-# J, Z and ?
-data2 <- data %>%
-  filter(allele =="R96B12")
-modR96B12 <- lm(percentage ~ pollen_handler, data2)
-summary(modR96B12)
+anova(mod2R84A12, modR84A12)
+# p-value of .01565
 ```
+
+```{r}
+# linear model for one allele (R84A12)
+# looking at totalkernels (think about doing a log transform on this model)
+# look at AIC to see which one works better 
+
+mod3R84A12 <- lm(percentage ~ totalkernels, R84A12)
+summary(mod3R84A12)
+#more competition.. less difference in percentage..
+```
+
+```{r}
+#find other 2 handlers to compare except ?
+redR84A12 <- R84A12 %>% 
+  filter(pollen_handler == "J" | pollen_handler == "?")
+t.test(percentage ~ pollen_handler, data = redR84A12)
+```
+
+```{r}
+mod4R84A12 <- lm(totalkernels ~ factor(year) + pollen_handler + female_genotype_group, redR84A12)
+summary(mod4R84A12)
+
+lmod4R84A12 <- lm(log(totalkernels) ~ factor(year) + pollen_handler + female_genotype_group, redR84A12)
+summary(lmod4R84A12)
+
+```
+
+```{r}
+mod5R84A12 <- lm(percentage ~ factor(year) + pollen_handler + totalkernels, redR84A12)
+summary(mod5R84A12)
+mod6R84A12 <- lm(percentage ~ factor(year) + pollen_handler + totalkernels, R84A12)
+summary(mod6R84A12)
+```
+
+---R96B12---
+
+```{r}
+# J, Z and ?
+#top 2 is J and Z
+
+data %>%
+  group_by(allele, pollen_handler) %>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R96B12")
+```
+
+```{r}
+# visualization of R96B12
+R96B12 <- data %>%
+  filter(allele =="R96B12")
+
+ggplot(R96B12, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR96B12 <- lm(percentage ~ pollen_handler + factor(year), R96B12)
+summary(modR96B12)
+
+mod2R96B12 <- lm(percentage ~ pollen_handler, R96B12)
+summary(mod2R96B12)
+```
+
+```{r}
+anova(mod2R96B12, modR96B12)
+# p-value of .2101
+```
+
 ```{r}
 #R96B12
 # J and Z only
 # very low r-square values
-data2 <- data %>%
+# not much difference in handlers
+# next step: total kernel effect
+redR96B12 <- data %>%
   filter(allele =="R96B12") %>%
   filter(pollen_handler != "?")
-modR96B12 <- lm(percentage ~ pollen_handler, data2)
-summary(modR96B12)
+mod2HR96B12 <- lm(percentage ~ pollen_handler, redR96B12)
+summary(mod2HR96B12)
+```
+
+```{r}
+mod3R96B12 <- lm(percentage ~ totalkernels, R96B12)
+summary(mod3R96B12)
+```
+
+```{r}
+t.test(percentage ~ pollen_handler, data = redR96B12)
+```
+
+```{r}
+mod4R96B12 <- lm(totalkernels ~ factor(year) + pollen_handler + female_genotype_group, redR96B12)
+summary(mod4R96B12)
+
+lmod4R96B12 <- lm(log(totalkernels) ~ factor(year) + pollen_handler + female_genotype_group, redR96B12)
+summary(lmod4R96B12)
+
+```
+
+```{r}
+mod5R96B12 <- lm(percentage ~ factor(year) + pollen_handler + totalkernels, redR96B12)
+summary(mod5R96B12)
+
+mod6R96B12 <- lm(percentage ~ factor(year) + pollen_handler + totalkernels, R96B12)
+summary(mod6R96B12)
+```
+
+---R96C12---
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler, year)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R96C12")
+# possible to do regression on this... (two sample t-test works)
+# ^ not putting the year in
+# focus is on consistency
+# makes sense to compare M and J (t-test)
+# this allele is likely to have a handler effect 
+# good to focus on this allele
+# for each row, percentage and s.d. and total number of kernels (ex. 10 data points for C)
+# x-axis is each row, and total kernels on y-axis
+# possion regression
+# or take the number of kernels as the response and do linear regression (lm... do log transformations maybe) and explanatory variable is handler and year (probably won't need interaction term)
+# for mean kernel, look into 3 genotypes (does depend on the years)... include in lm
+```
+
+```{r}
+# visualization of R96C12
+R96C12 <- data %>%
+  filter(allele =="R96C12")
+
+ggplot(R96C12, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR96C12 <- lm(percentage ~ pollen_handler + factor(year), R96C12)
+summary(modR96C12)
+
+mod2R96C12 <- lm(percentage ~ pollen_handler, R96C12)
+summary(mod2R96C12)
+```
+
+```{r}
+anova(mod2R96C12, modR96C12)
+# p-value of .01406
+```
+
+```{r}
+#R96C12... want to compare M and J
+redR96C12 <- data %>%
+  filter(allele =="R96C12") %>%
+  filter(pollen_handler == "M" | pollen_handler == "J")
+mod2HR96C12 <- lm(percentage ~ pollen_handler, redR96C12)
+summary(mod2HR96C12)
+```
+
+```{r}
+mod3R96C12 <- lm(percentage ~ totalkernels, R96C12)
+summary(mod3R96C12)
+```
+
+```{r}
+t.test(percentage ~ pollen_handler, data = redR96C12)
+```
+
+```{r}
+mod4R96C12 <- lm(totalkernels ~ pollen_handler, redR96C12)
+summary(mod4R96C12)
+
+lmod4R96C12 <- lm(log(totalkernels) ~ pollen_handler, redR96C12)
+summary(lmod4R96C12)
+
+```
+
+```{r}
+mod5R96C12 <- lm(percentage ~ pollen_handler + totalkernels, redR96C12)
+summary(mod5R96C12)
+
+#take this to all handlers
+mod6R96C12 <- lm(percentage ~ pollen_handler + totalkernels, R96C12)
+summary(mod6R96C12)
+```
+
+---R102H01---
+pollen handler might have an effect on total kernels. year, pollen handler, and total handler has no effect on percentage. 
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R102H01")
+```
+
+```{r}
+# visualization of R102H01
+R102H01 <- data %>%
+  filter(allele =="R102H01")
+
+ggplot(R102H01, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR102H01 <- lm(percentage ~ pollen_handler + factor(year), R102H01)
+summary(modR102H01)
+
+mod2R102H01 <- lm(percentage ~ pollen_handler, R102H01)
+summary(mod2R102H01)
+```
+
+```{r}
+anova(mod2R102H01, modR102H01)
+# p-value of .3057
+# year is not significant
+```
+
+```{r}
+#R102H01... want to compare Z and J
+#no difference
+redR102H01 <- data %>%
+  filter(allele =="R102H01") %>%
+  filter(pollen_handler == "Z" | pollen_handler == "J")
+mod2HR102H01 <- lm(percentage ~ pollen_handler, redR102H01)
+summary(mod2HR102H01)
+```
+
+```{r}
+#p-value .0929
+mod3R102H01 <- lm(percentage ~ totalkernels, R102H01)
+summary(mod3R102H01)
+```
+
+```{r}
+#no diff
+t.test(percentage ~ pollen_handler, data = redR102H01)
+```
+
+```{r}
+mod4R102H01 <- lm(totalkernels ~ pollen_handler, redR102H01)
+summary(mod4R102H01)
+#p-value: .0268
+
+lmod4R102H01 <- lm(log(totalkernels) ~ pollen_handler, redR102H01)
+summary(lmod4R102H01)
+#p-value: .0277
+```
+
+```{r}
+mod5R102H01 <- lm(percentage ~ pollen_handler + totalkernels, redR102H01)
+summary(mod5R102H01)
+
+#take this to all handlers
+mod6R102H01 <- lm(percentage ~ pollen_handler + totalkernels, R102H01)
+summary(mod6R102H01)
+```
+
+---R49F11---
+nothing of significance
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R49F11")
+```
+
+```{r}
+# visualization of R49F11
+R49F11 <- data %>%
+  filter(allele =="R49F11")
+
+ggplot(R49F11, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR49F11 <- lm(percentage ~ pollen_handler + factor(year), R49F11)
+summary(modR49F11)
+
+mod2R49F11 <- lm(percentage ~ pollen_handler, R49F11)
+summary(mod2R49F11)
+```
+
+```{r}
+# no year effect
+anova(mod2R49F11, modR49F11)
+# p-value of .6477
+```
+
+## decided not compare two handlers for this one
+
+```{r}
+# not significant
+mod3R49F11 <- lm(percentage ~ totalkernels, R49F11)
+summary(mod3R49F11)
 ```
 
 
+```{r}
+# nothing is significant.
+lmod4R49F11 <- lm(log(totalkernels) ~ pollen_handler, R49F11)
+summary(lmod4R49F11)
+
+```
+
+```{r}
+# not significant
+mod6R49F11<- lm(percentage ~ pollen_handler + totalkernels, R49F11)
+summary(mod6R49F11)
+```
+---R82A03---
+no significance
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R82A03")
+```
+
+```{r}
+# visualization of R82A03
+R82A03<- data %>%
+  filter(allele =="R82A03")
+
+ggplot(R82A03, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR82A03 <- lm(percentage ~ pollen_handler + factor(year), R82A03)
+summary(modR82A03)
+
+mod2R82A03<- lm(percentage ~ pollen_handler, R82A03)
+summary(mod2R82A03)
+```
+
+```{r}
+# year not significant
+anova(mod2R82A03, modR82A03)
+# p-value of .7363
+```
+## decided not to compare two handlers
+
+```{r}
+# not signficant
+mod3R82A03 <- lm(percentage ~ totalkernels, R82A03)
+summary(mod3R82A03)
+```
+
+```{r}
+# not signficant
+lmod4R82A03 <- lm(log(totalkernels) ~ pollen_handler, R82A03)
+summary(lmod4R82A03)
+```
+
+```{r}
+# not signficant
+mod6R82A03 <- lm(percentage ~ pollen_handler + totalkernels, R82A03)
+summary(mod6R82A03)
+```
+---R89B08---
+more kernels, lower the percentage...
+2019 vs. 2020 there is a diff (J)
+
+```{r}
+# could be interesting to compare J for 2019 vs. 2020
+data %>%
+  group_by(allele, pollen_handler, year)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R89B08")
+```
+
+```{r}
+# visualization of R89B08
+# negative slope
+R89B08 <- data %>%
+  filter(allele =="R89B08")
+
+ggplot(R89B08, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR89B08<- lm(percentage ~ pollen_handler + factor(year), R89B08)
+summary(modR89B08)
+
+mod2R89B08 <- lm(percentage ~ pollen_handler, R89B08)
+summary(mod2R89B08)
+```
+
+```{r}
+# year is signficant...?
+anova(mod2R89B08, modR89B08)
+# p-value of .01409
+```
+
+```{r}
+#R89B08... want to compare J for 2019 and 2020
+#p-value: .00138
+redR89B08 <- data %>%
+  filter(allele =="R89B08") %>%
+  filter(pollen_handler == "J") %>%
+  filter(year != 2021)
+mod2HR89B08 <- lm(percentage ~ factor(year), redR89B08)
+summary(mod2HR89B08)
+```
+
+```{r}
+#p-value: .00219... totalkernels does have effect
+mod3R89B08 <- lm(percentage ~ totalkernels, R89B08)
+summary(mod3R89B08)
+```
+
+```{r}
+#signficant diff in year
+t.test(percentage ~ factor(year), data = redR89B08)
+```
+
+```{r}
+# not significant.... interesting
+
+mod4R89B08 <- lm(totalkernels ~ factor(year), redR89B08)
+summary(mod4R89B08)
+
+lmod4R89B08 <- lm(log(totalkernels) ~ factor(year), redR89B08)
+summary(lmod4R89B08)
+
+```
+
+```{r}
+# 2019 is an interesting year...?
+
+mod5R89B08<- lm(percentage ~ factor(year) + totalkernels, redR89B08)
+summary(mod5R89B08)
+
+#take this to all years
+mod6R89B08 <- lm(percentage ~ factor(year) + totalkernels, R89B08)
+summary(mod6R89B08)
+```
+
+---R35A03---
+there could be a diff in total kernel depending on handler... but there's not really an year (have to check bc of error noted), totalkernel, handler effect on percentage though. 
+
+
+```{r}
+# either compare J and Z or J and M
+data %>%
+  group_by(allele, pollen_handler, year)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R35A03")
+```
+
+```{r}
+# visualization of R35A03
+R35A03 <- data %>%
+  filter(allele =="R35A03")
+
+ggplot(R35A03, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+# confused about outputs for first model for year...?
+modR35A03 <- lm(percentage ~ pollen_handler + factor(year), R35A03)
+summary(modR35A03)
+
+mod2R35A03 <- lm(percentage ~ pollen_handler, R35A03)
+summary(mod2R35A03)
+```
+
+```{r}
+# refer to earlier comment above
+anova(mod2R35A03, modR35A03)
+```
+
+```{r}
+#R35A03... want to compare Z and J
+redR35A03 <- data %>%
+  filter(allele =="R35A03") %>%
+  filter(pollen_handler == "Z" | pollen_handler == "J")
+mod2HR35A03 <- lm(percentage ~ pollen_handler, redR35A03)
+summary(mod2HR35A03)
+```
+
+```{r}
+# p-value: .12
+mod3R35A03 <- lm(percentage ~ totalkernels, R35A03)
+summary(mod3R35A03)
+```
+
+```{r}
+# no diff
+t.test(percentage ~ pollen_handler, data = redR35A03)
+```
+
+```{r}
+# both significant ~ .001
+mod4R35A03 <- lm(totalkernels ~ pollen_handler, redR35A03)
+summary(mod4R35A03)
+
+lmod4R35A03 <- lm(log(totalkernels) ~ pollen_handler, redR35A03)
+summary(lmod4R35A03)
+
+# Z is diff from ?... could just be Z...
+mod7R35A03 <- lm(totalkernels ~ pollen_handler, R35A03)
+summary(mod7R35A03)
+```
+
+```{r}
+# not significant for both
+
+mod5R35A03 <- lm(percentage ~ pollen_handler + totalkernels, redR35A03)
+summary(mod5R35A03)
+
+#take this to all handlers
+mod6R35A03 <- lm(percentage ~ pollen_handler + totalkernels, R35A03)
+summary(mod6R35A03)
+```
+
+---R04A02---
+no signficance
+
+
+```{r}
+data %>%
+  group_by(allele, pollen_handler, year)%>%
+  summarize(count = n(), meankernel = mean(totalkernels), sdkernel = sd(totalkernels), meanp = mean(percentage)) %>%
+  arrange(desc(count)) %>%
+  filter(allele == "R04A02")
+```
+
+```{r}
+# visualization of R04A02
+R04A02 <- data %>%
+  filter(allele =="R04A02")
+
+ggplot(R04A02, mapping = aes(x = totalkernels, y = percentage, color = pollen_handler)) +
+  geom_point()
+```
+
+```{r}
+modR04A02 <- lm(percentage ~ pollen_handler + factor(year), R04A02)
+summary(modR04A02)
+
+mod2R04A02 <- lm(percentage ~ pollen_handler, R04A02)
+summary(mod2R04A02)
+```
+
+```{r}
+#no year effect
+anova(mod2R04A02, modR04A02)
+# p-value of .9187
+```
+
+## decided not to compare two handlers
+
+```{r}
+# not signficant
+mod3R04A02 <- lm(percentage ~ totalkernels, R04A02)
+summary(mod3R04A02)
+```
+
+
+```{r}
+# no significance
+lmod4R04A02 <- lm(log(totalkernels) ~ pollen_handler, R04A02)
+summary(lmod4R04A02)
+
+```
+
+```{r}
+#take this to all handlers
+mod6R04A02 <- lm(percentage ~ pollen_handler + totalkernels, R04A02)
+summary(mod6R04A02)
+```
+
+
+--old work---
 ```{r}
 # linear model for one allele (R106E07)
 # one handler, but had the most kernels
