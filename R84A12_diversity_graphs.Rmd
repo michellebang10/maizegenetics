@@ -1,0 +1,185 @@
+---
+title: "R84A12 Diversity Graphs"
+author: "Michelle Bang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Function to get a nice df of coordinates 
+xml_to_coordinates <- function(input_data_path) {
+  library(xml2)
+  
+  
+  #### Importing the data and arranging it into a useful dataframe ####
+  input_xml_data <- read_xml(input_data_path)
+  #print(input_data_path)
+  
+  input_xml_as_list <- as_list(input_xml_data) # Not very elegant, but should work
+  
+  input_data_type_1 <- input_xml_as_list[[1]][[2]][[2]] # These should be the GFP kernels as long as the person annotating using type "1" for GFP
+  input_data_type_1 <- input_data_type_1[-1] # Removing the first sub-list which is just a number string of the data type
+  input_data_type_2 <- input_xml_as_list[[1]][[2]][[3]] # These should be non-GFP kernels
+  input_data_type_2 <- input_data_type_2[-1]
+  
+  # Making the dataframes with columns for type, x coordinate, and y coordinate
+  type_1_df <- data.frame("type" = rep("GFP", length(input_data_type_1)),
+                          "x" = as.numeric(unlist(sapply(input_data_type_1, "[[", 1))), 
+                          "y" = as.numeric(unlist(sapply(input_data_type_1, "[[", 2))))
+  
+  type_2_df <- data.frame("type" = rep("WT", length(input_data_type_2)),
+                          "x" = as.numeric(unlist(sapply(input_data_type_2, "[[", 1))), 
+                          "y" = as.numeric(unlist(sapply(input_data_type_2, "[[", 2))))
+  final_df <- rbind(type_1_df, type_2_df)
+  
+  return(final_df)
+  
+}
+```
+
+```{r}
+library(tidyverse)
+
+#trying use this for stacked histogram.... will see if it works...
+library(scales)
+```
+
+```{r}
+library(ggplot2);
+```
+
+
+male data: 
+
+```{r}
+#load file names based on your folder
+filenames = list.files("/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/malecrossfemalediversity", pattern="*.xml", full.names=TRUE)
+
+#extracting path name
+pathnames = paste0(dirname(filenames),"/", basename(filenames))
+pathnamesdf <- data.frame(pathnames)
+```
+
+```{r}
+for (i in 1:73) {
+  path <- pathnamesdf[i,]
+  name <- paste("testdf", i, sep = "")
+  assign(name, xml_to_coordinates(path))
+}
+
+#removes faulty xml from the files. After running this you have to run the xml_to_coordinates file loop.
+
+#sequence = rev(seq(1:length(coords)))
+
+#testdf <- xml_to_coordinates(list[22])
+```
+
+```{r}
+listData = list(testdf1, testdf2, testdf3, testdf4,
+                testdf5, testdf6, testdf7, testdf8,
+                testdf9, testdf10, testdf11, testdf12, 
+                testdf13, testdf14, testdf15, testdf16,
+                testdf17, testdf18, testdf19, testdf20,
+                testdf21, testdf22, testdf23, testdf24, 
+                testdf25, testdf26, testdf27, testdf28, testdf29, testdf30, testdf31, testdf32, testdf33, testdf34, testdf35, testdf36, testdf37, testdf38, testdf39, testdf40, testdf41, testdf42, testdf43, testdf44, testdf45, testdf46, testdf47, testdf48, testdf49, testdf50, testdf51, testdf52, testdf53, testdf54, testdf55, testdf56, testdf57, testdf58, testdf59, testdf60, testdf61, testdf62, testdf63, testdf64, testdf65, testdf66, testdf67, testdf68, testdf69, testdf70, testdf71, testdf72, testdf73)
+
+titleList <- as.list(basename(filenames))
+```
+
+This produces a bar graph of gfp vs. wt
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12malediversity.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:73) {
+  print(ggplot(data = listData[[i]], aes(x=type)) +
+      geom_bar()  +
+      ggtitle(titleList[[i]]) + 
+      theme(plot.title = element_text(hjust = 0.5)))
+}
+dev.off()
+```
+
+This produces graphs of gfp vs. wt for 16 bins. 
+```{r}
+
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12diversityGFPWTPlots16.pdf",
+    width = 4,
+    height = 4,)
+
+for (i in 1:73) {
+  num_bins = 16
+  testdf = listData[[i]]
+
+  xmax = max(testdf$x)
+  xmin = min(testdf$x)
+  bins = (xmax-xmin)/num_bins
+   
+  copy_df <- testdf
+  
+  #split data into bins by brute 
+
+  #make new data frame for being counted in next section
+  final_df = data.frame(bins= seq(xmin,xmax,bins),WT = c(1:(num_bins+1))*0,GFP = c(1:(num_bins+1))*0)
+  
+  
+  #sequences for the for-loops that come next
+  sequence = seq(1,nrow(testdf)) 
+  sequence2 = seq(1,nrow(final_df)-1)
+  
+  #The brute force part, requires that the final_df is empty or it will     double count
+
+  for (val in sequence) {                                             #for each value
+    for(n in sequence2) {                                              #for each bin
+          
+    #if the value is in the bin, but not any bins before it
+      if ((copy_df$x[val] >= final_df$bins[n]) && (copy_df$x[val] < final_df$bins[n+1]) ) { 
+        if (copy_df$type[val] == "WT") {                            #has to check if the kernel is WT or GFP then increments bin
+          final_df$WT[n] = final_df$WT[n] + 1                      
+        }               
+          else if (copy_df$type[val] == "GFP") {
+            final_df$GFP[n] = final_df$GFP[n] + 1
+          }
+        }
+    
+      }
+     }
+
+    #remove excess row
+  final_df = final_df[-c(num_bins+1),]
+  
+#adding a column for bins 1-16 instead of numeric
+bins1 = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16)
+final_df$bins <- bins1
+  
+   #ggplot of the WT with respect to x
+print(ggplot(data = final_df, aes(x = bins, y = WT)) +
+      geom_col()  +
+      ggtitle(titleList[[i]]) +
+      ylim(0,15) +
+      theme(plot.title = element_text(hjust = 0.5)))
+ 
+ #ggplot of the GFP with respect to x
+print(ggplot(data = final_df, aes(x = bins, y = GFP)) +
+      geom_col()  +
+      ggtitle(titleList[[i]]) +
+      ylim(0,15) +
+      theme(plot.title = element_text(hjust = 0.5)))
+
+#adding in plot with both wt/gfp into one
+test_long_df <- pivot_longer(final_df, 
+                             col = c(2,3),
+                             names_to = "type",
+                             values_to = "value")
+print(ggplot(data = test_long_df, aes(x = bins, y = value, fill = type)) +
+      #geom_col(position = "dodge2")  +
+      geom_col() +
+      ggtitle(titleList[[i]]) +
+      theme(plot.title = element_text(hjust = 0.5)) + coord_flip())
+ 
+}
+dev.off()
+```

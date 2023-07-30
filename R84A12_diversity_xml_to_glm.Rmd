@@ -1,0 +1,849 @@
+---
+title: "R84A12 Diversity xml to glm"
+author: "Michelle Bang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+Part 0: Loading all of my files and functions
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source("../LabWorkNathan-master/R/xml_to_coordinates.R")
+source("../LabWorkNathan-master/R/coordinates_to_xbins.R")
+library(ggplot2)
+library(tidyverse)
+library(ggpubr)
+```
+
+Here I am loading all the male .xml files of R84A12
+
+```{r}
+#load file names based on your folder
+filenames = list.files("/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/malecrossfemalediversity", pattern="*.xml", full.names=TRUE)
+```
+
+```{r}
+#Creating a list of file names to keep track of. 
+titleList <- as.list(basename(filenames))
+```
+
+```{r}
+#Directly creating a vector of the file names
+title_vec <- vector(length = length(filenames))
+
+for (i in 1:length(filenames)){
+  title_vec[i] <- basename(filenames)[[i]]
+}
+```
+
+Part 1: GLM on male data without chopping off the endpoints. 
+
+```{r}
+coords = lapply(filenames, xml_to_coordinates)
+
+#removes faulty xml from the files. 
+
+sequence = rev(seq(1:length(coords)))
+
+#checks if there will be an error when coordinates_to_xbins runs. If there is, it removes it from filenames 
+for (i in sequence) {
+  if (nrow(coords[[i]]) == 0)  {
+    check = filenames[i] #no files are removed here.
+    filenames = filenames[-i]
+    titleList = titleList[-i]
+  }
+}
+
+```
+
+This next part is poorly set up so if you run it twice it'll delete a few values from filenames that shouldn't be deleted. i.e this is why filenames and p_data can end up being different values.
+
+```{r}
+#the 0 observation issue is caused by files that don't use 1 and 2 as their marker numbers which is a requirement for xml_to_coordinates
+bin_data = lapply(coords, function(x) {coordinates_to_xbins(x,16)} )
+
+sequence = rev(seq(1:length(bin_data)))
+
+#removes the files that break the glm, namely the ears with only one kind of kernel allele. At most removes the cases with very few WT or GFP which are by definition odd ears. 
+
+for (i in sequence) {
+  sumWT = sum(bin_data[[i]]$WT)
+  sumGFP = sum(bin_data[[i]]$GFP)
+    if ((sumWT < 5) | (sumGFP < 5)) {
+      bin_data = bin_data[-i]
+      check = filenames[i] #nothing should be removed. checked below. 
+      filenames = filenames[-i]
+      titleList = titleList[-i]
+    }
+}
+
+#turn the data into a glm
+glm_data = lapply(bin_data, function(x) {glm(cbind(GFP,WT) ~ bins,family = quasibinomial(link = "logit"), data = x)})
+
+
+#extract the p values
+pv_data = lapply(glm_data, function(x) {(summary(x)$coefficients)})
+
+p_data = lapply(pv_data, function(x) {x[8]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+p_df <- data.frame(matrix(unlist(p_data), nrow=length(p_data), byrow=T))
+names(p_df)[names(p_df) == colnames(p_df[1])] = "p_value"
+
+```
+
+```{r}
+titleDf <- as.data.frame(t(titleList))
+titleDf <- t(titleDf)
+colnames(titleDf)[1] = "Name"
+fullDf = cbind(titleDf, p_df)
+```
+
+```{r}
+#print(check) #nothing was removed
+```
+
+
+Capturing the whole maize (one bin)
+```{r}
+#the 0 observation issue is caused by files that don't use 1 and 2 as their marker numbers which is a requirement for xml_to_coordinates
+full_data = lapply(coords, function(x) {coordinates_to_xbins(x,1)} )
+
+sequence = rev(seq(1:length(full_data)))
+
+#removes the files that break the glm, namely the ears with only one kind of kernel allele. At most removes the cases with very few WT or GFP which are by definition odd ears. 
+
+for (i in sequence) {
+  sumWT = sum(full_data[[i]]$WT)
+  sumGFP = sum(full_data[[i]]$GFP)
+    if ((sumWT < 5) | (sumGFP < 5)) {
+      full_data = full_data[-i]
+      check = filenames[i]
+    }
+}
+```
+
+Getting the transmission rate for each observation.
+```{r}
+TransmissionRate <- c()
+for (i in 1:73) {
+  TransmissionRate <- append(TransmissionRate, full_data[[i]]$GFP/(full_data[[i]]$GFP + full_data[[i]]$WT))
+}
+
+fullDf <- cbind(fullDf, TransmissionRate)
+```
+
+Taking the negative log of the p-values.
+```{r}
+fullDf <- fullDf %>%
+  mutate(neglogP = -log(p_value))
+```
+
+Plotting p-value data on a histogram.
+```{r}
+ggplot(data = p_df, aes(p_value)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment (per ear)")
+
+```
+
+Plotting transmission rate and negative log of p-values on a scatterplot. 
+```{r}
+ggplot(data = fullDf, aes(x = TransmissionRate, y = neglogP)) +
+  geom_point()
+
+#3 on the y-axis is roughly .05
+#look at the four observations that are above y = 4
+#and also the other five for y = 3
+```
+
+Uncomment below chunk to create .tsv file of results. 
+```{r}
+fullDf1 = as.matrix(fullDf)
+write.table(fullDf1, file = "R84A12_diversity_glm.tsv", sep = "\t", row.names=FALSE) 
+```
+
+\newpage
+---
+
+Part 2: GLM on male data after taking off the endpoints. 
+
+We are taking the same bin data used for our first analysis.
+```{r}
+#start chopping off the ends
+sequence = seq(1,length(bin_data))
+#sequence2 = seq(2,15)
+#sequence3 = seq(1,14)
+
+#Creating an empty list
+bin_ed = list()
+```
+
+```{r}
+for (i in sequence) {
+    bin_ed[[i]] = data.frame("bins" = bin_data[[i]]$bins[2:15], "WT" = bin_data[[i]]$WT[2:15] , "GFP" = bin_data[[i]]$GFP[2:15])
+}
+```
+
+```{r}
+#turn the data into a glm
+ends_glm_data = lapply(bin_ed, function(x) {glm(cbind(GFP,WT) ~ bins,family = quasibinomial(link = "logit"), data = x)})
+
+
+#extract the p values
+ends_pv_data = lapply(ends_glm_data, function(x) {(summary(x)$coefficients)})
+
+ends_p_data = lapply(ends_pv_data, function(x) {x[8]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+adj_p_data = p.adjust(p_data,method = "fdr")
+
+adj_p_df <- data.frame(matrix(unlist(adj_p_data), nrow=length(adj_p_data), byrow=T))
+names(adj_p_df)[names(adj_p_df) == colnames(adj_p_df[1])] = "adj_p_value"
+
+ends_p_df <- data.frame(matrix(unlist(ends_p_data), nrow=length(ends_p_data), byrow=T))
+names(ends_p_df)[names(ends_p_df) == colnames(ends_p_df[1])] = "p_value"
+
+```
+
+Plot P-values on a histogram.
+```{r}
+ggplot(data = ends_p_df, aes(p_value)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment, without endpoints (per ear)")
+
+```
+
+```{r}
+endsfullDf = cbind(titleDf, ends_p_df)
+endsfullDf <- cbind(endsfullDf, TransmissionRate)
+endsfullDf <- cbind(endsfullDf, adj_p_df)
+```
+
+```{r}
+endsfullDf <- endsfullDf %>%
+  mutate(neglogP = -log(p_value))
+```
+
+```{r}
+ggplot(data = endsfullDf, aes(x = TransmissionRate, y = neglogP)) +
+  geom_point()
+```
+
+```{r}
+endsfullDf1 = as.matrix(endsfullDf)
+write.table(endsfullDf1, file = "R84A12_diversity_glm_ends.tsv", sep = "\t", row.names=FALSE) 
+```
+
+\newpage
+---
+
+Part 3: Comparing the p-values of ends removed and ends not removed. 
+
+```{r}
+#Creating master data frame with both ends removed and ends not removed data.
+
+fullDf2 = fullDf
+
+endsDf = endsfullDf
+
+#Changing variable names so it doesn't come in conflict later. 
+colnames(fullDf2)[2] = "p_value_full"
+colnames(fullDf2)[1] = "Name_full"
+colnames(fullDf2)[3] = "Rate_full"
+colnames(fullDf2)[4] = "neg_log_full"
+
+colnames(endsDf)[2] = "p_value_ends"
+colnames(endsDf)[1] = "Name_ends"
+colnames(endsDf)[3] = "Rate_ends"
+colnames(endsDf)[4] = "neg_log_ends"
+
+#Combining the two data frames together. 
+endsandfull <- cbind(endsDf, fullDf2)
+```
+
+```{r}
+cor(endsandfull$p_value_ends, endsandfull$p_value_full)
+#Correlation coefficient of.
+```
+
+```{r}
+ggplot(endsandfull, mapping = aes(x = p_value_ends, y = p_value_full)) +
+  geom_point()
+```
+
+Ordering the observations by ascending order of p_value_full
+```{r}
+ordered_full<- endsandfull %>%
+  arrange(p_value_full)
+```
+
+Ordering the observations by asceding order of p_value_ends
+
+```{r}
+ordered_ends<- endsandfull %>%
+  arrange(p_value_ends)
+```
+
+Checking to see which observations do not match up in order.
+```{r}
+counter = 0
+
+for (i in 1:73){
+  #Name_ends or Name_full shouldn't matter.
+  if(ordered_ends$Name_ends[[i]] != ordered_full$Name_ends[[i]]) {
+    counter = counter + 1
+  } else {
+    print(i)
+  }
+}
+
+print(counter) #42 observations are in different orders. 
+#observation 20 and 43 are in the same order for both ordering. 
+```
+
+Trying to filter the results where the p-values do not match up. 
+```{r}
+#All values differ in p-value. 
+endsandfull %>%
+  filter(p_value_ends != p_value_full)
+```
+
+Doing a paired t-test on the p-values. 
+Result show that the difference in p-values are not statistically significant from each other.
+```{r}
+t.test(endsandfull$p_value_ends, endsandfull$p_value_full, paired = TRUE, alternative = "two.sided")
+```
+
+\newpage 
+---
+
+Part 4: Adding a quadratic term. 
+
+4.1: Adding a quadratic term without removing the ends. 
+```{r}
+#First part of set up should be the same as regular GLM
+
+bins_squared = bin_data
+bin_sq_data = bin_data
+
+sequence = seq(1, length(bin_data))
+sequence2  = seq(1, 16)
+
+for (i in sequence) {
+  for (j in sequence2) {
+  bins_squared[[i]]$bins[j] = (bin_sq_data[[i]]$bins[j])^2
+  }
+  bin_sq_data[[i]] = data.frame(bin_sq_data[[i]],bins_squared[[i]]$bins)
+}
+```
+
+```{r}
+#turn the data into a glm
+#if this breaks just double check how R is naming the bin_squared column of bin_data and replace "bins_squared..i...bins" with that
+sq_glm_data = lapply(bin_sq_data, function(x) {glm(cbind(GFP,WT) ~ bins + bins_squared..i...bins,family = quasibinomial(link = "logit"), data = x)})
+```
+
+```{r}
+#extract the p value for quad model.
+sq_pv_data = lapply(sq_glm_data, function(x) {(summary(x)$coefficients)})
+
+sq_p_data = lapply(sq_pv_data, function(x) {x[12]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+sq_p_df <- data.frame(matrix(unlist(sq_p_data), nrow=length(sq_p_data), byrow=T))
+names(sq_p_df)[names(sq_p_df) == colnames(sq_p_df[1])] = "p_value_sq"
+
+```
+Plot p-values on histogram
+```{r}
+ggplot(data = sq_p_df, aes(p_value_sq)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values of bins^2") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment (per ear)")
+
+```
+
+Creating data frame with all the data.
+```{r}
+sqfullDf = cbind(titleDf, sq_p_df)
+sqfullDf <- cbind(sqfullDf, TransmissionRate)
+```
+
+```{r}
+sqfullDf <- sqfullDf %>%
+  mutate(neglogP = -log(p_value_sq))
+```
+
+
+Run this chunk to convert dataframe into .tsv file.
+```{r}
+sqfullDf1 = as.matrix(sqfullDf)
+write.table(sqfullDf1, file = "R84A12_diversity_glm_sq.tsv", sep = "\t", row.names=FALSE) 
+```
+
+
+4.2: Adding a quadratic term with ends removed. 
+
+```{r}
+#First part of set up should be the same as GLM with ends chopped off.
+
+bins_squared_ends = bin_ed
+bin_sq_data_ends = bin_ed
+
+sequence = seq(1, length(bin_ed))
+sequence2  = seq(1, 14)
+
+for (i in sequence) {
+  for (j in sequence2) {
+  bins_squared_ends[[i]]$bins[j] = (bin_sq_data_ends[[i]]$bins[j])^2
+  }
+  bin_sq_data_ends[[i]] = data.frame(bin_sq_data_ends[[i]],bins_squared_ends[[i]]$bins)
+}
+```
+
+```{r}
+#turn the data into a glm
+#if this breaks just double check how R is naming the bin_squared column of bin_data and replace "bins_squared..i...bins" with that
+sq_glm_data_ends = lapply(bin_sq_data_ends, function(x) {glm(cbind(GFP,WT) ~ bins + bins_squared_ends..i...bins,family = quasibinomial(link = "logit"), data = x)})
+```
+
+
+```{r}
+#extract the p value for glm.
+sq_pv_data_ends = lapply(sq_glm_data_ends, function(x) {(summary(x)$coefficients)})
+
+sq_p_data_ends = lapply(sq_pv_data_ends, function(x) {x[12]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+sq_ends_p_df <- data.frame(matrix(unlist(sq_p_data_ends), nrow=length(sq_p_data_ends), byrow=T))
+names(sq_ends_p_df)[names(sq_ends_p_df) == colnames(sq_ends_p_df[1])] = "p_value_sq"
+
+```
+
+Plot p-values on histogram
+```{r}
+ggplot(data = sq_ends_p_df, aes(p_value_sq)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values of quad model with ends chopped off") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment (per ear)")
+
+```
+
+Creating data frame with all the data.
+```{r}
+sqfullendsDf = cbind(titleDf, sq_ends_p_df)
+sqfulendslDf <- cbind(sqfullendsDf, TransmissionRate)
+```
+
+```{r}
+sqfullendsDf <- sqfullendsDf %>%
+  mutate(neglogP = -log(p_value_sq))
+```
+
+
+Run this chunk to convert dataframe into .tsv file.
+```{r}
+sqfullendsDf1 = as.matrix(sqfullendsDf)
+write.table(sqfullendsDf1, file = "R84A12_diversity_glm_sq_ends.tsv", sep = "\t", row.names=FALSE) 
+```
+
+\newpage
+---
+
+Part 5: Testing the quadratic term.
+
+5.1: Without ends removed. 
+
+```{r}
+#Creating null model
+null_model <- lapply(bin_data, function(x) {glm(cbind(GFP,WT) ~ 1,family = quasibinomial(link = "logit"), data = x)})
+```
+
+```{r}
+#Setting up empty list
+anova_data <- vector(length = length(bin_data))
+```
+
+```{r}
+for (i in 1:length(bin_data)){
+  anova_data[i] <- anova(null_model[[i]], sq_glm_data[[i]], test = "F")$"Pr(>F)"[2]
+}
+```
+
+```{r}
+anova_df <- as.data.frame(anova_data)
+#anova_df <- t(anova_df)
+row.names(anova_df) <- 1:length(bin_data)
+colnames(anova_df)[1] = "p_value"
+anova_df <- cbind(anova_df, title_vec)
+colnames(anova_df)[2] = "name"
+```
+
+```{r}
+ggplot(data = anova_df, aes(p_value)) +
+  geom_histogram(binwidth = 0.05) +
+  xlab("P-values") +
+  ylab("Count") +
+  ggtitle("P-Values from anova on null vs. quad model")
+
+```
+
+```{r}
+#extract the p value for the bins^2 variable.
+sq_pv_sq_data = lapply(sq_glm_data, function(x) {(summary(x)$coefficients)})
+
+sq_p_sq_data = lapply(sq_pv_sq_data, function(x) {x[12]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+sq_p_sq_df <- data.frame(matrix(unlist(sq_p_sq_data), nrow=length(sq_p_sq_data), byrow=T))
+names(sq_p_sq_df)[names(sq_p_sq_df) == colnames(sq_p_sq_df[1])] = "p_value_sq"
+
+```
+Plot p-values on histogram
+```{r}
+ggplot(data = sq_p_sq_df, aes(p_value_sq)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values of bins^2") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment (per ear)")
+
+```
+```{r}
+write.table(anova_df, file = "R84A12_diversity_anova.tsv", sep = "\t", row.names=FALSE) 
+```
+
+5.2: With ends removed. 
+
+```{r}
+#Creating null model
+null_ends_model <- lapply(bin_ed, function(x) {glm(cbind(GFP,WT) ~ 1,family = quasibinomial(link = "logit"), data = x)})
+```
+
+```{r}
+#Setting up empty list
+anova_ends_data <- vector(length = length(bin_ed))
+```
+
+```{r}
+for (i in 1:length(bin_ed)){
+  anova_ends_data[i] <- anova(null_ends_model[[i]], sq_glm_data_ends[[i]], test = "F")$"Pr(>F)"[2]
+}
+```
+
+```{r}
+anova_ends_df <- as.data.frame(anova_ends_data)
+row.names(anova_ends_df) <- 1:length(bin_ed)
+adj_anova = p.adjust(anova_ends_data, method = "fdr")
+colnames(anova_ends_df)[1] = "p_value"
+anova_ends_df <- cbind(anova_ends_df, title_vec)
+colnames(anova_ends_df)[2] = "name"
+anova_ends_df <- cbind(anova_ends_df, adj_anova)
+colnames(anova_ends_df)[3] = "adj_p_value"
+```
+
+```{r}
+ggplot(data = anova_ends_df, aes(p_value)) +
+  geom_histogram(binwidth = 0.05) +
+  xlab("P-values") +
+  ylab("Count") +
+  ggtitle("P-Values from anova on null vs. quad model of with ends removed")
+
+```
+
+```{r}
+#extract the p value for the bins^2 variable.
+sq_pv_data_sq_ends = lapply(sq_glm_data_ends, function(x) {(summary(x)$coefficients)})
+
+sq_p_data_sq_ends = lapply(sq_pv_data_sq_ends, function(x) {x[12]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+sq_ends_p_sq_df <- data.frame(matrix(unlist(sq_p_data_sq_ends), nrow=length(sq_p_data_sq_ends), byrow=T))
+names(sq_ends_p_sq_df)[names(sq_ends_p_sq_df) == colnames(sq_ends_p_sq_df[1])] = "p_value_sq"
+
+```
+
+Plot p-values on histogram
+```{r}
+ggplot(data = sq_ends_p_sq_df, aes(p_value_sq)) +
+      geom_histogram(binwidth = .05) +
+      xlab("P-Values of bins^2 with ends chopped off") +
+      ylab("Count") +
+      ggtitle("P-Values of all ear families without adjustment (per ear)")
+
+```
+
+```{r}
+write.table(anova_ends_df, file = "R84A12_diversity_anova_ends.tsv", sep = "\t", row.names=FALSE) 
+```
+
+\newpage
+---
+Part 6: Looking at more graphs.
+
+7.1: X-coords vs. Transmission Rate with ends
+
+Modifying each observation so it includes a column for transmission rate. You could also use the method in R84A12_graphs.rmd to do the same thing. 
+```{r}
+tester <- data.frame(bin_data[1]) %>%
+  mutate(rate = GFP/(WT + GFP))
+bin_w_trate = list(tester)
+for(i in 2:73) {
+  tester <- data.frame(bin_data[i]) %>%
+    mutate(rate = GFP/(WT + GFP)) %>%
+    mutate(rate = if_else(is.na(rate), 0, rate)) #this is not working??
+  test = list(tester)
+  bin_w_trate = append(bin_w_trate, test)
+}
+```
+
+```{r}
+bin_w_trate[[1]]
+bin_w_trate[[1]] %>%
+  mutate(rate = if_else(is.na(rate), 0, rate))
+```
+
+```{r}
+ggplot(data = bin_w_trate[[1]], aes(x=bins, y = rate)) +
+      geom_point()  +
+      ggtitle(titleList[[1]]) + 
+      theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_data)) {
+  print(ggplot(data = bin_w_trate[[i]], aes(x = bins, y = rate)) +
+      geom_point()  +
+      ggtitle(titleList[[i]]) + 
+      theme(plot.title = element_text(hjust = 0.5)))
+}
+dev.off()
+```
+
+7.1.1: Graph with R^2 and regression line equation (both linear and quadratic). 
+
+
+```{r}
+
+cor_df <- data.frame(title_vec)
+colnames(cor_df)[1] = "name"
+cor_df <- cor_df %>%
+  add_column(cor = 0)
+
+for (i in 1:length(bin_w_trate)) {
+  cor_df$cor[i] = cor(bin_w_trate[[i]]$bins, bin_w_trate[[i]]$rate)
+}
+```
+
+```{r}
+
+#Testing on singular observation. 
+#Linear
+
+ggplot(data = bin_w_trate[[1]], aes(x=bins, y = rate)) +
+  geom_smooth(method="lm") +
+  geom_point() +
+  stat_regline_equation(label.x=30, label.y=1) +
+  stat_cor(aes(label=..rr.label..), label.x=30, label.y=.9) +
+  annotate("text", x = 260, y = .8, label = paste("cor =", cor_df[1,2], sep = " "), size = 4) +
+  ggtitle(titleList[[1]]) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Bins/X-coord", y = "Transmission Rate")
+
+  
+```
+
+```{r}
+
+#Testing on singular observation.
+#Quadratic
+
+ggplot(data = bin_w_trate[[1]], aes(x=bins, y = rate)) +
+  geom_smooth(method="lm", formula = y~poly(x,2)) +
+  geom_point() +
+  stat_regline_equation(formula = y~poly(x,2), label.x=30, label.y=1, aes(label= paste(..eq.label.., ..rr.label.., sep = "~~~~"))) +
+  ggtitle(titleList[[1]]) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Bins/X-coord", y = "Transmission Rate") 
+
+  
+```
+
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr_linear.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_data)) {
+  print(ggplot(data = bin_w_trate[[i]], aes(x=bins, y = rate)) +
+          geom_smooth(method="lm") +
+          geom_point() +
+          stat_regline_equation(label.x=30, label.y=1) +
+          stat_cor(aes(label=..rr.label..), label.x=30, label.y=.9) +
+          annotate("text", x = 500, y = .8, label = paste("cor =", cor_df[i,2], sep = " "), size = 4) +
+          ggtitle(titleList[[i]]) + 
+          theme(plot.title = element_text(hjust = 0.5)) +
+          labs(x = "Bins/X-coord", y = "Transmission Rate"))
+}
+dev.off()
+```
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr_quad.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_data)) {
+  print(ggplot(data = bin_w_trate[[i]], aes(x=bins, y = rate)) +
+          geom_smooth(method="lm", formula = y~poly(x,2)) +
+          geom_point() +
+          stat_regline_equation(formula = y~poly(x,2), label.x=30, label.y=1, aes(label= paste(..eq.label.., ..rr.label.., sep = "~~~~"))) +
+          ggtitle(titleList[[i]]) + 
+          theme(plot.title = element_text(hjust = 0.5)) +
+          labs(x = "Bins/X-coord", y = "Transmission Rate") )
+}
+dev.off()
+```
+
+
+7.2: X-coords vs. Transmission Rate without ends
+
+Modifying each observation so it includes a column for transmission rate. You could also use the method in R84A12_graphs.rmd to do the same thing. 
+```{r}
+tester <- data.frame(bin_ed[1]) %>%
+  mutate(rate = GFP/(WT + GFP))
+bin_w_trate_ed = list(tester)
+for(i in 2:73) {
+  tester <- data.frame(bin_ed[i]) %>%
+    mutate(rate = GFP/(WT + GFP)) %>%
+    mutate(rate = if_else(is.na(rate), 0, rate)) #this is not working?? so extra check down below
+  test = list(tester)
+  bin_w_trate_ed = append(bin_w_trate_ed, test)
+}
+```
+
+```{r}
+for(i in 1:length(bin_ed)) {
+  bin_w_trate_ed[[i]] <- bin_w_trate_ed[[i]] %>%
+    mutate(rate = if_else(is.na(rate), 0, rate))
+}
+```
+
+```{r}
+ggplot(data = bin_w_trate_ed[[1]], aes(x=bins, y = rate)) +
+      geom_point()  +
+      ggtitle(titleList[[1]]) + 
+      theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr_ends.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_ed)) {
+  print(ggplot(data = bin_w_trate_ed[[i]], aes(x = bins, y = rate)) +
+      geom_point()  +
+      ggtitle(titleList[[i]]) + 
+      theme(plot.title = element_text(hjust = 0.5)))
+}
+dev.off()
+```
+
+7.2.1: Graph with R^2 and regression line equation (both linear and quadratic). 
+
+
+```{r}
+
+cor_end_df <- data.frame(title_vec)
+colnames(cor_end_df)[1] = "name"
+cor_end_df <- cor_end_df %>%
+  add_column(cor = 0)
+
+for (i in 1:length(bin_w_trate_ed)) {
+  cor_end_df$cor[i] = cor(bin_w_trate_ed[[i]]$bins, bin_w_trate_ed[[i]]$rate)
+}
+```
+
+```{r}
+
+#Testing on singular observation. 
+#Linear
+
+ggplot(data = bin_w_trate_ed[[1]], aes(x=bins, y = rate)) +
+  geom_smooth(method="lm") +
+  geom_point() +
+  stat_regline_equation(label.x=30, label.y=1) +
+  stat_cor(aes(label=..rr.label..), label.x=30, label.y=.9) +
+  annotate("text", x = 260, y = .8, label = paste("cor =", cor_end_df[1,2], sep = " "), size = 4) +
+  ggtitle(titleList[[1]]) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Bins/X-coord", y = "Transmission Rate")
+
+  
+```
+```{r}
+
+#Testing on singular observation.
+#Quadratic
+
+ggplot(data = bin_w_trate_ed[[1]], aes(x=bins, y = rate)) +
+  geom_smooth(method="lm", formula = y~poly(x,2)) +
+  geom_point() +
+  stat_regline_equation(formula = y~poly(x,2), label.x=30, label.y=1, aes(label= paste(..eq.label.., ..rr.label.., sep = "~~~~"))) +
+  ggtitle(titleList[[1]]) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Bins/X-coord", y = "Transmission Rate") 
+
+  
+```
+
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr_linear_ends.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_ed)) {
+  print(ggplot(data = bin_w_trate_ed[[i]], aes(x=bins, y = rate)) +
+          geom_smooth(method="lm") +
+          geom_point() +
+          stat_regline_equation(label.x=30, label.y=1) +
+          stat_cor(aes(label=..rr.label..), label.x=30, label.y=.9) +
+          annotate("text", x = 500, y = .8, label = paste("cor =", cor_end_df[i,2], sep = " "), size = 4) +
+          ggtitle(titleList[[i]]) + 
+          theme(plot.title = element_text(hjust = 0.5)) +
+          labs(x = "Bins/X-coord", y = "Transmission Rate"))
+}
+dev.off()
+```
+```{r}
+pdf(file = "/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/R84A12_diversity_xcoordsbytr_quad_ends.pdf",
+    width = 4,
+    height = 4,)
+for (i in 1:length(bin_ed)) {
+  print(ggplot(data = bin_w_trate_ed[[i]], aes(x=bins, y = rate)) +
+          geom_smooth(method="lm", formula = y~poly(x,2)) +
+          geom_point() +
+          stat_regline_equation(formula = y~poly(x,2), label.x=30, label.y=1, aes(label= paste(..eq.label.., ..rr.label.., sep = "~~~~"))) +
+          ggtitle(titleList[[i]]) + 
+          theme(plot.title = element_text(hjust = 0.5)) +
+          labs(x = "Bins/X-coord", y = "Transmission Rate") )
+}
+dev.off()
+```

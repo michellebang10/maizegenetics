@@ -1,0 +1,249 @@
+---
+title: "R84A12 Flipped Images"
+author: "Michelle Bang"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+Part 0: Loading all of my files and functions
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+source("../LabWorkNathan-master/R/xml_to_coordinates.R")
+source("../LabWorkNathan-master/R/coordinates_to_xbins.R")
+library(ggplot2)
+library(tidyverse)
+```
+
+```{r}
+#Load file names based on your folder
+#This is loading all files (flipped and not flipped)
+filenames = list.files("/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/flippedimages/male", pattern="*.xml", full.names=TRUE)
+```
+
+```{r}
+#Loading only the flipped files
+filenamesflip = list.files("/Users/michellebang/st research lab/spatialanalysis/SpatialAnalysisMichelle/flippedimages/male", pattern="*_f.xml", full.names=TRUE)
+```
+
+```{r}
+#Loading only the not flipped files
+filenamesnotflip = filenames[!grepl("*\\_f.xml", filenames)]
+```
+
+```{r}
+#Creating a list of file names to keep track of. 
+#This is the title list for flipped files.
+titleflipList <- as.list(basename(filenamesflip))
+```
+
+```{r}
+#Creating a list of file names to keep track of. 
+#This is the title list for not flipped files. 
+titlenotflipList <- as.list(basename(filenamesnotflip))
+```
+
+```{r}
+#Creating a list of file names to keep track of.
+#This is the title list for all files.
+titleList <- as.list(basename(filenames))
+```
+
+```{r}
+#Directly creating a vector of the file names
+title_vec <- vector(length = length(filenames))
+
+for (i in 1:length(filenames)){
+  title_vec[i] <- basename(filenames)[[i]]
+}
+```
+
+```{r}
+titleDf = data.frame(title_vec)
+```
+
+```{r}
+#Filter flipped files
+
+titleflipDf <- titleDf %>%
+  filter(grepl("_f.xml$", title_vec))
+```
+
+```{r}
+#Filter not flipped files
+
+titlenotflipDf <- titleDf %>%
+  filter(!grepl("_f.xml$", title_vec))
+```
+
+
+
+Part 1: Comparing regular GLM on flipped and non-flipped.
+
+```{r}
+flipcoords = lapply(filenamesflip, xml_to_coordinates)
+
+#removes faulty xml from the files. 
+
+sequence = rev(seq(1:length(flipcoords)))
+
+#checks if there will be an error when coordinates_to_xbins runs. If there is, it removes it from filenames 
+for (i in sequence) {
+  if (nrow(flipcoords[[i]]) == 0)  {
+    check = filenamesflip[i] 
+    filenamesflip = filenamesflip[-i]
+    titleflipList = titleflipList[-i]
+  }
+}
+
+```
+
+This next part is poorly set up so if you run it twice it'll delete a few values from filenames that shouldn't be deleted. i.e this is why filenames and p_data can end up being different values.
+
+```{r}
+#the 0 observation issue is caused by files that don't use 1 and 2 as their marker numbers which is a requirement for xml_to_coordinates
+flipbin_data = lapply(flipcoords, function(x) {coordinates_to_xbins(x,16)} )
+
+sequence = rev(seq(1:length(flipbin_data)))
+
+#removes the files that break the glm, namely the ears with only one kind of kernel allele. At most removes the cases with very few WT or GFP which are by definition odd ears. 
+
+for (i in sequence) {
+  sumWT = sum(flipbin_data[[i]]$WT)
+  sumGFP = sum(flipbin_data[[i]]$GFP)
+    if ((sumWT < 5) | (sumGFP < 5)) {
+      flipbin_data = flipbin_data[-i]
+      check = filenamesflip[i] 
+      filenamesflip = filenamesflip[-i]
+      titleflipList = titleflipList[-i]
+    }
+}
+
+#turn the data into a glm
+flipglm_data = lapply(flipbin_data, function(x) {glm(cbind(GFP,WT) ~ bins,family = quasibinomial(link = "logit"), data = x)})
+
+
+#extract the p values
+flippv_data = lapply(flipglm_data, function(x) {(summary(x)$coefficients)})
+
+flipp_data = lapply(flippv_data, function(x) {x[8]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+flipp_df <- data.frame(matrix(unlist(flipp_data), nrow=length(flipp_data), byrow=T))
+names(flipp_df)[names(flipp_df) == colnames(flipp_df[1])] = "p_value"
+
+```
+
+
+```{r}
+notflipcoords = lapply(filenamesnotflip, xml_to_coordinates)
+
+#removes faulty xml from the files. 
+
+sequence = rev(seq(1:length(notflipcoords)))
+
+#checks if there will be an error when coordinates_to_xbins runs. If there is, it removes it from filenames 
+for (i in sequence) {
+  if (nrow(notflipcoords[[i]]) == 0)  {
+    check = filenamesnotflip[i] #no files are removed here.
+    notflipfilenames = notflipfilenames[-i]
+    titlenotflipList = titlenotflipList[-i]
+  }
+}
+
+```
+
+This next part is poorly set up so if you run it twice it'll delete a few values from filenames that shouldn't be deleted. i.e this is why filenames and p_data can end up being different values.
+
+```{r}
+#the 0 observation issue is caused by files that don't use 1 and 2 as their marker numbers which is a requirement for xml_to_coordinates
+notflipbin_data = lapply(notflipcoords, function(x) {coordinates_to_xbins(x,16)} )
+
+sequence = rev(seq(1:length(notflipbin_data)))
+
+#removes the files that break the glm, namely the ears with only one kind of kernel allele. At most removes the cases with very few WT or GFP which are by definition odd ears. 
+
+for (i in sequence) {
+  sumWT = sum(notflipbin_data[[i]]$WT)
+  sumGFP = sum(notflipbin_data[[i]]$GFP)
+    if ((sumWT < 5) | (sumGFP < 5)) {
+      notflipbin_data = notflipbin_data[-i]
+      check = notflipfilenames[i] #nothing should be removed. checked below. 
+      filenamesnotflip = filenamesnotflip[-i]
+      titlenotflipList = titlenotflipList[-i]
+    }
+}
+```
+
+```{r}
+rev(notflipbin_data[[1]]$bins)
+```
+
+```{r}
+#flipping the order of the bins
+for(i in 1:length(notflipbin_data)){
+  notflipbin_data[[i]] <- notflipbin_data[[i]] %>%
+    mutate(bins_new = rev(bins))
+}
+```
+
+```{r}
+#turn the data into a glm
+notflipglm_data = lapply(notflipbin_data, function(x) {glm(cbind(GFP,WT) ~ bins_new,family = quasibinomial(link = "logit"), data = x)})
+
+
+#extract the p values
+notflippv_data = lapply(notflipglm_data, function(x) {(summary(x)$coefficients)})
+
+notflipp_data = lapply(notflippv_data, function(x) {x[8]})
+
+#comment this out to look at the non adjusted values, you can swap the method by changing 'method = fdr'
+#p_data = p.adjust(p_data,method = "fdr")
+
+notflipp_df <- data.frame(matrix(unlist(notflipp_data), nrow=length(notflipp_data), byrow=T))
+names(notflipp_df)[names(notflipp_df) == colnames(notflipp_df[1])] = "p_value_notflipped"
+
+```
+
+
+combine the p-values from both cases together and compare
+
+```{r}
+full_df = cbind(titlenotflipDf, flipp_df)
+full_df = cbind(full_df, notflipp_df)
+```
+
+```{r}
+ggplot(data = full_df, mapping = aes(x = p_value, y = p_value_notflipped)) +
+  geom_point()
+```
+
+```{r}
+#p-value: 0.2078
+#estimate: -0.01738885 
+#95% CI: -0.04637681  0.01159910
+t.test(full_df$p_value, full_df$p_value_notflipped, paired = TRUE, alternative = "two.sided")
+```
+
+```{r}
+#0.9932355
+cor(full_df$p_value, full_df$p_value_notflipped)
+```
+
+comparing the actual bin segments of flipped and not flipped
+```{r}
+#There is a significant difference in bins for all
+t.test(notflipbin_data[[1]]$bins, flipbin_data[[1]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[2]]$bins, flipbin_data[[2]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[3]]$bins, flipbin_data[[3]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[4]]$bins, flipbin_data[[4]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[5]]$bins, flipbin_data[[5]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[6]]$bins, flipbin_data[[6]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[7]]$bins, flipbin_data[[7]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[8]]$bins, flipbin_data[[8]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[9]]$bins, flipbin_data[[9]]$bins, paired = TRUE, alternative = "two.sided") 
+t.test(notflipbin_data[[10]]$bins, flipbin_data[[10]]$bins, paired = TRUE, alternative = "two.sided") 
+```
