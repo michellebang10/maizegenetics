@@ -180,8 +180,9 @@ endsfullDf <- endsfullDf %>%
 
 #Another way of accounting for multiple testing
 #Should give out percentage of null p-values (we are interested in 1-nullper)
-per_adj_p_data = tryCatch(expr = {pi0est(unlist(ends_p_data))}, error = function(e){not_able()})
-trueProp =tryCatch(expr = {1-per_adj_p_data$pi0}, error = function(e){not_able()})
+min_p = min(unlist(ends_p_data)) + .05
+per_adj_p_data = pi0est(unlist(ends_p_data), lambda = seq(min_p, .5, length.out=10), pi0.method = "bootstrap")
+trueProp = 1-per_adj_p_data$pi0
 truePVal[n,2] = trueProp
 
 
@@ -235,8 +236,9 @@ colnames(anova_ends_df)[2] = "adj_p_value_sq"
 
 #Another way of accounting for multiple testing
 #Should give out percentage of null p-values (we are interested in 1-nullper)
-per_adj_anova = tryCatch(expr = {pi0est(unlist(anova_ends_data))}, error = function(e) {not_able()})
-truePropA = tryCatch(expr = {1-per_adj_anova$pi0}, error = function(e) {not_able()})
+min_p = min(unlist(anova_ends_data)) + .05
+per_adj_anova = pi0est(unlist(anova_ends_data), lambda = seq(min_p, .5, length.out = 10), pi0.method = "bootstrap")
+truePropA = 1-per_adj_anova$pi0
 truePVal[n,3] = truePropA
 
 endsfullDf <- cbind(endsfullDf, anova_ends_df)
@@ -292,7 +294,7 @@ stat_sum[n,7] = var(coef_ends_sq_glm)
 ```
 
 ```{r}
-#write.table(truePVal, file = "prop_true_pval_updated_optimal.tsv", sep = "\t", row.names=FALSE) 
+write.table(truePVal, file = "prop_true_pval_v41724.tsv", sep = "\t", row.names=FALSE) 
 ```
 
 ```{r}
@@ -345,4 +347,8 @@ new_df %>%
             count = n()) %>%
   arrange(desc(mean_rate))
 
+```
+
+```{r}
+#use the anova to test between lin and quad model
 ```
