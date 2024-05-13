@@ -59,13 +59,18 @@ for (i in 1:length(list_alleles)){
 ```
 
 ```{r}
-truePVal = data.frame(matrix(nrow = length(filenames), ncol = 3)) 
-colnames(truePVal) <- c("Allele", "Linear", "Quad")
+#truePVal = data.frame(matrix(nrow = length(filenames), ncol = 3)) 
+#colnames(truePVal) <- c("Allele", "Linear", "Quad")
+#truePVal[1] = list_alleles
+truePVal = data.frame(matrix(nrow = length(filenames), ncol = 13)) 
+colnames(truePVal) <- c("Allele", "True Prop", "Lin Prop", "Quad Prop", "Lin Prop Count", "Quad Prop Count", "Adj P-Val Prop (< .1)", "Adj P-Val (< .1) from Lin", "Adj P-Val (<.1) from Quad", "Total Count", "SE", "Lower 95% CI", "Upper 95% CI")
 truePVal[1] = list_alleles
 ```
 
 ```{r}
 megaDf = data.frame()
+anova_comp_full = data.frame()
+megaBestDf = data.frame()
 ```
 
 ```{r}
@@ -180,10 +185,11 @@ endsfullDf <- endsfullDf %>%
 
 #Another way of accounting for multiple testing
 #Should give out percentage of null p-values (we are interested in 1-nullper)
+
 min_p = min(unlist(ends_p_data)) + .05
 per_adj_p_data = pi0est(unlist(ends_p_data), lambda = seq(min_p, .5, length.out=10), pi0.method = "bootstrap")
 trueProp = 1-per_adj_p_data$pi0
-truePVal[n,2] = trueProp
+truePVal[n,3] = trueProp
 
 
 #ANOVA Testing for quadratic term
@@ -239,7 +245,7 @@ colnames(anova_ends_df)[2] = "adj_p_value_sq"
 min_p = min(unlist(anova_ends_data)) + .05
 per_adj_anova = pi0est(unlist(anova_ends_data), lambda = seq(min_p, .5, length.out = 10), pi0.method = "bootstrap")
 truePropA = 1-per_adj_anova$pi0
-truePVal[n,3] = truePropA
+truePVal[n,4] = truePropA
 
 endsfullDf <- cbind(endsfullDf, anova_ends_df)
 
@@ -289,12 +295,156 @@ stat_sum[n,6] = sqrt(sum(se_sq_ends_new)/length(sq_glm_data_ends)^2)
 #stat_sum[n,7] = sum(var_sq_ends)/length(sq_glm_data_ends)^2
 stat_sum[n,7] = var(coef_ends_sq_glm)
 
+#ANOVA to test between linear model and the quadratic model
+#Setting up empty list
+anova_comparison <- vector(length = length(bin_ed))
+
+for (i in 1:length(bin_ed)){
+  anova_comparison[i] <- anova(ends_glm_data[[i]], sq_glm_data_ends[[i]], test = "F")$"Pr(>F)"[2]
+}
+
+anova_comp_df <- as.data.frame(anova_comparison)
+row.names(anova_comp_df) <- 1:length(bin_ed)
+adj_anova_comp = p.adjust(anova_comparison, method = "fdr")
+colnames(anova_comp_df)[1] = "p_value"
+anova_comp_df <- cbind(anova_comp_df, adj_anova_comp)
+colnames(anova_comp_df)[2] = "adj_p_value"
+anova_comp_df <- anova_comp_df %>%
+  mutate(allele = filenames[[n]][[1]])
+
+anova_comp_full <- rbind(anova_comp_full, anova_comp_df)
+
+#Choosing only one p-value for pi0est
+pi0est_p_vals <- data.frame(matrix(nrow = length(bin_ed), ncol = 1)) 
+best_df <- data.frame(matrix(nrow = length(bin_ed), ncol = 8))
+colnames(best_df) <- c("Allele", "Name", "P_Value", "Model", "Adj_P_Value", "Lin_Coef", "Quad_Coef", "Inc_Dec")
+best_df[1] = filenames[[n]][[1]]
+best_df[2] = titleDf
+
+quad_count = 0
+lin_count = 0
+
+for (i in 1:length(bin_ed)) {
+  if (anova_comp_df[[1]][[i]] > .1) {
+    pi0est_p_vals[[1]][[i]] = ends_p_df[[1]][[i]]
+    best_df[[3]][[i]] = ends_p_df[[1]][[i]]
+    best_df[[4]][[i]] = "L"
+    #add line about choosing adj pvalue for quad or lin
+    lin_count = lin_count + 1
+    #getting coef
+    best_df[[6]][[i]] = coef_ends_glm[[i]]
+    best_df[[7]][[i]] = "NA"
+  } else {
+    pi0est_p_vals[[1]][[i]] = anova_ends_df[[1]][[i]]
+    best_df[[3]][[i]] = anova_ends_df[[1]][[i]]
+    best_df[[4]][[i]] = "Q"
+    #add line about choosing adj pvalue for quad or lin
+    quad_count = quad_count + 1
+    #getting coef
+    best_df[[6]][[i]] = coef_ends_glm[[i]]
+    best_df[[7]][[i]] = coef_ends_sq_glm[[i]]
+  }
+}
+
+
+min_p = min(unlist(pi0est_p_vals)) + .05
+per_adj_p_data = pi0est(unlist(pi0est_p_vals), lambda = seq(min_p, .5, length.out=10), pi0.method = "bootstrap")
+trueProp = 1-per_adj_p_data$pi0
+nullProp = per_adj_p_data$pi0
+pi_lamba = per_adj_p_data$pi0.lambda
+lambda = per_adj_p_data$lambda
+l = 0
+for (i in 1:length(lambda)) {
+  if (nullProp == pi_lamba[i]) {
+    l = lambda[i]
+    break
+  }
+}
+truePVal[n,2] = trueProp
+truePVal[n,5] = lin_count
+truePVal[n,6] = quad_count
+m = lin_count + quad_count
+SE <- sqrt((nullProp * (1-nullProp*(1-l)))/(m*(1-l)))
+truePVal[n,11] = SE
+truePVal[n,12] = trueProp - 1.96*SE
+truePVal[n,13] = trueProp + 1.96*SE
+
+#prop of adj pvalue below .1
+adj_p_comp = p.adjust(unlist(pi0est_p_vals), method = "fdr")
+adj_p_comp_df <- data.frame(matrix(unlist(adj_p_comp), nrow=length(adj_p_comp), byrow=T))
+names(adj_p_comp_df)[names(adj_p_comp_df) == colnames(adj_p_comp_df[1])] = "adj_p_value"
+
+best_df[[5]] = adj_p_comp
+
+adj_cnt <- adj_p_comp_df %>%
+  filter(adj_p_value < .1) %>%
+  summarize(count = n())
+
+adj_l_cnt <- best_df %>%
+  filter(Adj_P_Value < .1, Model == "L") %>%
+  summarize(count = n())
+
+adj_q_cnt <- best_df %>%
+  filter(Adj_P_Value < .1, Model == "Q") %>%
+  summarize(count = n())
+
+truePVal[n,7] = adj_cnt[[1]][[1]]/(lin_count + quad_count)
+
+truePVal[n,8] = adj_l_cnt[[1]][[1]]
+
+truePVal[n,9] = adj_q_cnt[[1]][[1]]
+
+#total count
+truePVal[n,10] = lin_count + quad_count
+
+#Looking at the specific ears with small adj p_values, check if the trend is increasing or decreasing
+for (i in 1:length(bin_ed)) {
+  if (best_df[[5]][[i]] < .1) {
+    if (best_df[[4]][[i]] == "L") {
+      if (best_df[[6]][[i]] > 0) {
+        best_df[[8]][[i]] = "I"
+      } else {
+        best_df[[8]][[i]] = "D"
+      }
+    } else {
+      best_df[[8]][[i]] = "Check"
+    }
+  } else {
+    best_df[[8]][[i]] = "NA"
+  }
+}
+
+megaBestDf <- rbind(megaBestDf, best_df)
 }
 
 ```
 
+
 ```{r}
-write.table(truePVal, file = "prop_true_pval_v41724.tsv", sep = "\t", row.names=FALSE) 
+#looking at the specific ears with small adj pvalues, check if the trend is increasing or decreasing 
+#for lin, just need to look at the coefficient
+#for quad, need an extra step to check if its monotonic
+```
+
+```{r}
+write.table(truePVal, file = "prop_true_pval_v050924.tsv", sep = "\t", row.names=FALSE) 
+```
+
+```{r}
+#write.table(megaBestDf, file = "incr_decr.tsv", sep = "\t", row.names=FALSE) 
+```
+
+```{r}
+megaBestDf %>%
+  filter(Inc_Dec == "Check")
+```
+```{r}
+sig_obs <- megaBestDf %>%
+  filter(Inc_Dec != "NA")
+```
+
+```{r}
+write.table(sig_obs, file = "significant_observations.tsv", sep = "\t", row.names=FALSE)
 ```
 
 ```{r}
@@ -331,7 +481,7 @@ cnt <-new_df %>%
 ```
 
 ```{r}
-write.table(stat_sum, file = "stat_sum_paper.tsv", sep = "\t", row.names=FALSE)
+#write.table(stat_sum, file = "stat_sum_paper.tsv", sep = "\t", row.names=FALSE)
 ```
 
 ```{r}
@@ -341,7 +491,7 @@ write.table(stat_sum, file = "stat_sum_paper.tsv", sep = "\t", row.names=FALSE)
 ```
 
 ```{r}
-new_df %>%
+mean_count <- new_df %>%
   group_by(allele) %>%
   summarize(mean_rate = mean(TransmissionRate),
             count = n()) %>%
@@ -350,5 +500,24 @@ new_df %>%
 ```
 
 ```{r}
-#use the anova to test between lin and quad model
+#write.table(mean_count, file = "mean_count_paper.tsv", sep = "\t", row.names=FALSE)
+```
+
+```{r}
+anova_comp <- anova_comp_full %>%
+  group_by(allele) %>%
+  summarize(mean_p = mean(p_value), 
+            var_p = var(p_value),
+            max_p = max(p_value),
+            min_p = min(p_value), 
+            mean_adj = mean(adj_p_value),
+            )
+```
+
+```{r}
+#write.table(anova_comp, file = "anova_comp_paper.tsv", sep = "\t", row.names=FALSE)
+```
+
+```{r}
+#write.table(anova_comp_full, file = "anova_comp_full_paper.tsv", sep = "\t", row.names=FALSE)
 ```
